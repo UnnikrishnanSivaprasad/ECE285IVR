@@ -1,7 +1,7 @@
 # ECE285IVR
-##Project C: Wavelets
+## Project C: Wavelets
 
-###Authors: 
+### Authors: 
 Mathew Sam
 Erik Seetao
 Unnikrishnan Sivaprasad
