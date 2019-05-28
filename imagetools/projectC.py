@@ -9,26 +9,36 @@ Your names here:
 from .assignment6 import *
 import numpy as np
 
+def matrix_prod(x,y):
+    return np.sum(np.multiply(x,y))
+
+def adjoint(nu):
+    mu = np.flip(np.flip(nu,axis=0),axis=1)
+    return mu
+
 class Identity:
     '''
-    Initialises identity matrix of dimension nxn
+    Initialises identity matrix of dimension shape
     '''
-    def __init__(self, n):
+    def __call__(self, shape):
         '''
         n is an integer 
         '''
-        self.m = np.zeros(shape=(n,n))
-        for i in range(n):
-            self.m[i][i]=1
-
+        m=np.ones((shape.shape[0],shape.shape[1],shape.shape[2]))
+        return m*shape
+        
+    def adjoint(self, shape):
+        self.m=np.ones((shape.shape[0],shape.shape[1],shape.shape[2]))
+        return adjoint(self.m)*shape
             
 class Convolution:
-    def __init__(self,shape, nu, separable=None):
+    def __call__(self,shape, nu, separable=None):
         '''
         shape is a matrix 
         nu is the kernel
         '''
         x=shape
+        boundary="periodical"
         n1, n2 = x.shape[:2]
         xconv = np.zeros(x.shape)
         if not separable:
@@ -65,5 +75,15 @@ class Convolution:
                 shifted_image = im.shift(x,0,-l,boundary)
                 xconv2 = xconv2 + (shifted_image*nu2[0,s2+l])           
             xconv = xconv1 + xconv2
-        self.conv=xconv
+        return xconv
+        
+class RandomMasking:
+    def __call__(self,shape,p1):
+        x=np.random.choice([0, 1], size=(shape.shape[0],shape.shape[1]), p=[p1, 1-p1])
+        m=np.dstack((np.dstack((x,x)),x))
+        return m*shape
+    def adjoint(self,shape,p1):
+        x=np.random.choice([0, 1], size=(shape.shape[0],shape.shape[1]), p=[p1, 1-p1])
+        self.m=np.dstack((np.dstack((x,x)),x))
+        return adjoint(self.m)*shape
     
