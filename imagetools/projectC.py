@@ -5,85 +5,170 @@ COMPLETE THIS FILE
 Your names here:
 
 """
+import numpy as np 
+import numpy.fft as nf
+from .provided import *
+from .assignment5 import kernel2fft,convolvefft,adjoint
 
-from .assignment6 import *
-import numpy as np
-
-def matrix_prod(x,y):
-    return np.sum(np.multiply(x,y))
-
-def adjoint(nu):
-    mu = np.flip(np.flip(nu,axis=0),axis=1)
-    return mu
-
-class Identity:
+class Identity(LinearOperator):
     '''
-    Initialises identity matrix of dimension shape
+    Implements the identity operator encapsulated as a class
     '''
-    def __call__(self, shape):
+    def __call__(self, x):
         '''
-        n is an integer 
+        Calls Idenetity class as operator
+        Args:
+            x:input image
+        Returns:
+            copy of x
         '''
-        m=np.ones((shape.shape[0],shape.shape[1],shape.shape[2]))
-        return m*shape
+        assert x.shape == self.ishape
+        return x.copy()
         
-    def adjoint(self, shape):
-        self.m=np.ones((shape.shape[0],shape.shape[1],shape.shape[2]))
-        return adjoint(self.m)*shape
-            
-class Convolution:
-    def __call__(self,shape, nu, separable=None):
+    def adjoint(self,x):
         '''
-        shape is a matrix 
-        nu is the kernel
+        Returns operation of adjoint of identity operation on input x
+        Args:
+            x: input to the operator
+        Returns:
+            copy of x
         '''
-        x=shape
-        boundary="periodical"
-        n1, n2 = x.shape[:2]
-        xconv = np.zeros(x.shape)
-        if not separable:
-            s1 =int((nu.shape[0] - 1) / 2)
-            s2 =int((nu.shape[1] - 1) / 2)
-            for k in range(-s1,s1+1):
-                for l in range(-s2,s2+1):
-                    shifted_image = im.shift(x,-k,-l,boundary)
-                    xconv = xconv + shifted_image*nu[s1+k,s2+l]
+        assert x.shape == self.ishape
+        return x.copy()
+    
+    def gram(self,x):
+        '''
+        Returns operation of gram operation on input x
+        Args:
+            x: input to the operator
+        Returns:
+            copy of x
+        '''
+        assert x.shape == self.ishape
+        return x.copy()
 
-        elif separable is "product":
-            nu1,nu2 = nu
-            s1 =int((nu1.shape[0] - 1) / 2)
-            s2 =int((nu2.shape[1] - 1) / 2)
-            for k in range(-s1,s1+1):
-                shifted_image = im.shift(x,-k,0,boundary)
-                xconv = xconv + (shifted_image*nu1[s1+k,0])
-            x = xconv.copy()
-            xconv = np.zeros(x.shape)
-            for l in range(-s2,s2+1):
-                shifted_image = im.shift(x,0,-l,boundary)
-                xconv = xconv + (shifted_image*nu2[0,s2+l])
+    def gram_resolvent(self,x,tau):
+        '''
+         
+        Returns operation of  of idegramntity operation on input x
+        Args:
+            x: input to the operator
+            tau: scaling offered to matrix
+        Returns:
+            copy of x      
+        '''
+        res = x.copy()/(1 + tau)
+        return res 
 
-        elif separable is "sum":
-            nu1,nu2 = nu
-            s1 =int((nu1.shape[0] - 1) / 2)
-            s2 =int((nu2.shape[1] - 1) / 2)
-            xconv1 = np.zeros(x.shape)
-            xconv2 = np.zeros(x.shape)
-            for k in range(-s1,s1+1):
-                shifted_image = im.shift(x,-k,0,boundary)
-                xconv1 = xconv1 + (shifted_image*nu1[s1+k,0])
-            for l in range(-s2,s2+1):
-                shifted_image = im.shift(x,0,-l,boundary)
-                xconv2 = xconv2 + (shifted_image*nu2[0,s2+l])           
-            xconv = xconv1 + xconv2
-        return xconv
+class Convolution(LinearOperator):
+    '''
+    Implements the convolution operator encapsulated as a class
+    '''
+    def __init__(self,shape, nu, separable=None):
+        '''
+        Initializes the convolution as an operator encapsulated as a class
+        Args:
+            self: pointer to current instance of the class
+            shape: shape of the input 
+            nu: kernel to convolve input with
+        Kwargs:
+            separable: indicates nature of separabiity
+        '''
+        self.ishape = shape
+        if separable:
+            assert isinstance(separable,str)
+            assert separable in ("product","sum")
+        self.n1,self.n2 = shape[:2]
+        self.lbd = kernel2fft(nu,self.n1,self.n2,separable=separable)
+        self.adj_lbd = kernel2fft(adjoint(nu),self.n1,self.n2,separable=separable)
+
+    def __call__(self,x):
+        '''
+        Computes convolution of x with a kernel of frequency response lbd
+        Args:
+            x : input image
+        Returns:
+            y : output of convolution
+        '''
+        assert x.shape == self.ishape
+        if len(x.shape)==3:
+            temp = nf.fft2(x,axes=(0,1))*np.expand_dims(self.lbd,axis=-1)
+        elif len(x.shape)==2:
+            temp = nf.fft2(x,axes=(0,1))*self.lbd
+        res = np.abs(nf.ifft2(temp,axes=(0,1)))
+        return res
+
+    def adjoint(self,x):
+        '''
+        Computes the adjoint of the convolution with kernel nu
+        Args:
+            x: input to convolution operator
+        Returns:
+            y : output of convolution
+        '''
+        assert x.shape == self.ishape
+        if len(x.shape)==3:
+            temp = nf.fft2(x,axes=(0,1))*np.expand_dims(self.adj_lbd,axis=-1)
+        elif len(x.shape)==2:
+            temp = nf.fft2(x,axes=(0,1))*self.adj_lbd
+        res = np.abs(nf.ifft2(temp,axes=(0,1)))
+        return res    
+
+    def gram(self,x):
+        '''
+        Returns gram of convolution operation
+        Args:
+            x: input to operation
+        Returns:
+            gram operation of kernel
+        '''
+        assert x.shape == self.ishape
+        return self.adjoint(self.__call__(x))
+
+    def gram_resolvent(self,x,tau):
+        '''
+        Args:
+            x: input to the operator
+            tau: scaling offered to matrix
+        Returns:
+            copy of x      
+        '''
+        assert x.shape == self.ishape
+        res_lbd = 1 / (1 - tau * self.lbd)
+        return convolvefft(x, res_lbd)
+
+class RandomMasking(LinearOperator):
+    def __init__(self,shape,p):
+        '''
+        Initializes matrix for Random Masking
+        '''
+        self.ishape = shape
+        self.kernel = np.random.choice([0,1],size=shape,p=[p,1-p])
+    
+    def __call__(self,x):
+        '''
+        '''
+        assert x.shape == self.ishape
+        return x*self.kernel
+
+    def adjoint(self,x):
+        '''
+        '''
+        assert x.shape == self.ishape
+        return x*self.kernel 
+
+    def gram(self,x):
+        '''
+        '''
+        assert x.shape == self.ishape
+        return x*self.kernel 
+
+    def gram_resolvent(self,x,tau):
+        '''
+        '''
+        assert x.shape == self.ishape
+        return cg(lambda z: z + tau * self.gram(z), x)
+
+
         
-class RandomMasking:
-    def __call__(self,shape,p1):
-        x=np.random.choice([0, 1], size=(shape.shape[0],shape.shape[1]), p=[p1, 1-p1])
-        m=np.dstack((np.dstack((x,x)),x))
-        return m*shape
-    def adjoint(self,shape,p1):
-        x=np.random.choice([0, 1], size=(shape.shape[0],shape.shape[1]), p=[p1, 1-p1])
-        self.m=np.dstack((np.dstack((x,x)),x))
-        return adjoint(self.m)*shape
     
