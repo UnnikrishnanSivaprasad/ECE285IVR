@@ -137,7 +137,10 @@ def kernel(name,tau=1,eps=1e-3):
         elif name.endswith("2"):
             kernel = np.ones((1,3))
             kernel[0,1] = -2
-    if name.startswith("grad") or name.startswith("laplacian"):
+    elif name is "motion":
+        kernel = np.load("assets/motionblur.npy")
+        
+    if name.startswith("grad") or name.startswith("laplacian") or name is "motion":
         return kernel
     else:
         kernel = kernel/np.sum(kernel)

@@ -64,7 +64,7 @@ class Convolution(LinearOperator):
     '''
     Implements the convolution operator encapsulated as a class
     '''
-    def __init__(self,shape, nu, separable=None):
+    def __init__(self,ishape, nu, separable=None):
         '''
         Initializes the convolution as an operator encapsulated as a class
         Args:
@@ -74,13 +74,13 @@ class Convolution(LinearOperator):
         Kwargs:
             separable: indicates nature of separabiity
         '''
-        self.ishape = shape
+        #self.ishape = shape
         if separable:
             assert isinstance(separable,str)
             assert separable in ("product","sum")
-        self.n1,self.n2 = shape[:2]
+        self.n1,self.n2 = ishape[:2]
         self.lbd = kernel2fft(nu,self.n1,self.n2,separable=separable)
-        self.adj_lbd = kernel2fft(adjoint(nu),self.n1,self.n2,separable=separable)
+        self.adj_lbd = np.conjugate(self.lbd)
 
     def __call__(self,x):
         '''
@@ -90,13 +90,8 @@ class Convolution(LinearOperator):
         Returns:
             y : output of convolution
         '''
-        assert x.shape == self.ishape
-        if len(x.shape)==3:
-            temp = nf.fft2(x,axes=(0,1))*np.expand_dims(self.lbd,axis=-1)
-        elif len(x.shape)==2:
-            temp = nf.fft2(x,axes=(0,1))*self.lbd
-        res = np.abs(nf.ifft2(temp,axes=(0,1)))
-        return res
+        #assert x.shape == self.ishape
+        return convolvefft(x,self.lbd)
 
     def adjoint(self,x):
         '''
@@ -106,14 +101,8 @@ class Convolution(LinearOperator):
         Returns:
             y : output of convolution
         '''
-        assert x.shape == self.ishape
-        if len(x.shape)==3:
-            temp = nf.fft2(x,axes=(0,1))*np.expand_dims(self.adj_lbd,axis=-1)
-        elif len(x.shape)==2:
-            temp = nf.fft2(x,axes=(0,1))*self.adj_lbd
-        res = np.abs(nf.ifft2(temp,axes=(0,1)))
-        return res    
-
+        return convolvefft(x,self.adj_lbd)
+    
     def gram(self,x):
         '''
         Returns gram of convolution operation
@@ -122,8 +111,8 @@ class Convolution(LinearOperator):
         Returns:
             gram operation of kernel
         '''
-        assert x.shape == self.ishape
-        return self.adjoint(self.__call__(x))
+        #assert x.shape == self.ishape
+        return convolvefft(x,self.lbd*self.adj_lbd)
 
     def gram_resolvent(self,x,tau):
         '''
@@ -133,40 +122,38 @@ class Convolution(LinearOperator):
         Returns:
             copy of x      
         '''
-        assert x.shape == self.ishape
-        res_lbd = 1 / (1 - tau * self.lbd)
-        return convolvefft(x, res_lbd)
+        #assert x.shape == self.ishape
+        return cg(lambda z: z + tau * self.gram(z), x)
 
 class RandomMasking(LinearOperator):
-    def __init__(self,shape,p):
+    def __init__(self,ishape,p):
         '''
         Initializes matrix for Random Masking
         '''
-        self.ishape = shape
-        self.kernel = np.random.choice([0,1],size=shape,p=[p,1-p])
+        self.kernel = np.random.choice([0,1],size=ishape,p=[p,1-p])
     
     def __call__(self,x):
         '''
         '''
-        assert x.shape == self.ishape
+        #assert x.shape == self.ishape
         return x*self.kernel
 
     def adjoint(self,x):
         '''
         '''
-        assert x.shape == self.ishape
+        #assert x.shape == self.ishape
         return x*self.kernel 
 
     def gram(self,x):
         '''
         '''
-        assert x.shape == self.ishape
+        #assert x.shape == self.ishape
         return x*self.kernel 
 
     def gram_resolvent(self,x,tau):
         '''
         '''
-        assert x.shape == self.ishape
+        #assert x.shape == self.ishape
         return cg(lambda z: z + tau * self.gram(z), x)
 
 

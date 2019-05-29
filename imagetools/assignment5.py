@@ -84,7 +84,7 @@ def convolvefft(x, lbd):
         temp = nf.fft2(x,axes=(0,1))*np.expand_dims(lbd,axis=-1)
     elif len(x.shape)==2:
         temp = nf.fft2(x,axes=(0,1))*lbd
-    res = np.abs(nf.ifft2(temp,axes=(0,1)))
+    res = np.real(nf.ifft2(temp,axes=(0,1)))
     return res
 
 def adjoint(nu):
