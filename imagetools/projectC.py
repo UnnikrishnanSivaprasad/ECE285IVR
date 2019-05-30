@@ -209,3 +209,35 @@ def idwt1d(z, h, g): # 1d and 1scale
     coarse[::2, :], detail[::2, :] = z[:m1, :], z[m1:, :]
     x = convolve(coarse, g[::-1]) + convolve(detail, h[::-1])
     return x    
+
+class DWT(LinearOperator):
+    def __init__(self,ishape,J,name="db2"):
+        '''
+        Initializes op for DWT transform encalsulated as a class
+        Args:
+            shape : shape of input provided
+            J: number of scales at which the op is carried out
+        Kwargs:
+            name:name of wavelet used
+        '''
+        self.shape = ishape
+        self.h,self.g = wavelet(name) 
+        self.J = J
+
+    def __call__(self,x):
+        return dwt(x,self.J,self.h,self.g)
+
+    def adjoint(self,x):
+        return idwt(x,self.J,self.h,self.g)
+
+    def gram(self,x):
+        return idwt(dwt(x,self.J,self.h,self.g),self.J,self.h,self.g)
+
+    def gram_resolvent(self,x,tau):
+        return cg(lambda z: z + tau * self.gram(z), x)
+
+    def invert(self,x):
+        return idwt(x,self.J,self.h,self.g)
+
+    def power(self):
+        return dwt_power(self.shape[0],self.shape[1],len(self.shape))
