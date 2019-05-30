@@ -11,6 +11,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 from .assignment5 import *
+from .assignment2 import shift,convolve,kernel
 
 
 #############
@@ -411,7 +412,7 @@ class Grad(LinearOperator):
 ######################
 
 
-def dtw_crop(x, J):
+def dwt_crop(x, J):
     """ Crop an image to the largest dimension compatible with the 2d discrete
     wavelet transform (DWT) with J scales.
 

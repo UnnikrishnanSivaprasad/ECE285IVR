@@ -9,7 +9,7 @@ import numpy as np
 import numpy.fft as nf
 from .provided import *
 from .assignment5 import kernel2fft,convolvefft,adjoint
-
+from .assignment2 import *
 class Identity(LinearOperator):
     '''
     Implements the identity operator encapsulated as a class
@@ -156,6 +156,56 @@ class RandomMasking(LinearOperator):
         #assert x.shape == self.ishape
         return cg(lambda z: z + tau * self.gram(z), x)
 
+def dwt(x,J,h,g):
+    '''
+    Computes the discrete wavelet transform
+    Args:
+        x: input image
+        J: number of scales at which the wavelet transform is computed
+        h: high pass filter used 
+        g: lowpass filter used
+    Returns:
+        z : dwt coefficients
+    '''
+    if J == 0:
+        return x
+    n1, n2 = x.shape[:2]
+    m1, m2 = (int(n1 / 2), int(n2 / 2))
+    z = dwt1d(x, h, g)
+    z = np.rot90(dwt1d(np.rot90(z,k=3), h, g),k=1)
+    z[:m1, :m2] = dwt(z[:m1, :m2], J - 1, h, g)
+    return z
 
+def dwt1d(x, h, g): # 1d and 1scale
+    '''
+    compute 1D wavelet transform
+    Args:
+        x: input image
+        h:high pass filter
+        g:low pass filter
+    Returns:
+        z:dwt coefficients
+    '''
+    coarse = convolve(x, g)
+    detail = convolve(x, h)
+    z = np.concatenate((coarse[::2, :], detail[::2, :]), axis=0)
+    return z
         
-    
+def idwt(z, J, h, g): # 2d and multi-scale
+    if J == 0:
+        return z
+    n1, n2 = z.shape[:2]
+    m1, m2 = (int(n1 / 2), int(n2 / 2))
+    x = z.copy()
+    x[:m1, :m2] = idwt(x[:m1, :m2], J - 1, h, g)
+    x = np.rot90(idwt1d(np.rot90(x,k=3), h, g),k=1)
+    x = idwt1d(x, h, g)
+    return x
+
+def idwt1d(z, h, g): # 1d and 1scale
+    n1 = z.shape[0]
+    m1 = int(n1 / 2)
+    coarse, detail = np.zeros(z.shape), np.zeros(z.shape)
+    coarse[::2, :], detail[::2, :] = z[:m1, :], z[m1:, :]
+    x = convolve(coarse, g[::-1]) + convolve(detail, h[::-1])
+    return x    
