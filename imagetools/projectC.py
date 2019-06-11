@@ -241,3 +241,157 @@ class DWT(LinearOperator):
 
     def power(self):
         return dwt_power(self.shape[0],self.shape[1],len(self.shape))
+
+    
+def interleave0(x):
+    '''
+    Upsample the filters h and g in udwt by injecting 2^(j − 1) zeros between each entries.
+    Args:
+        x: input vector
+        j: interleaving factor
+    Returns:
+        x1: interleaved vector
+    '''
+    x1=np.zeros(((x.shape[0]-1)*2+1,1))
+    x1[::2,:]=x
+    return x1
+
+
+def udwt(x, J, h, g):
+    '''
+    Implements the 2d Undecimated Discrete Wavelet Transform (UDWT) with J scales
+    Args:
+        x: image
+        J: scales
+        h: filter h
+        g: filter g
+    Returns:
+        z: udwt transformation
+    '''
+    if J == 0:
+        return x[:, :, None]
+    tmph = np.rot90(convolve(np.rot90(x,k=3), h),k=1) / 2
+    tmpg = np.rot90(convolve(np.rot90(x,k=3), g),k=1) / 2     
+    z = np.stack((convolve(tmpg, h),convolve(tmph, g),convolve(tmph, h)), axis=2)
+    coarse = convolve(tmpg, g)
+    h2 = interleave0(h)
+    g2 = interleave0(g)
+    z = np.concatenate((udwt(coarse, J - 1, h2, g2), z),axis=2)
+    return z
+
+def iudwt(z, J, h, g):
+    '''
+    Implements the 2d Inverse UDWT
+    Args:
+        z: input img
+        J: scales
+        h: filter h
+        g: filter g
+    Returns:
+        x: the 2D inverse UDWT
+    '''
+    if J == 0:
+        return z[:, :, 0]
+    h2 = interleave0(h)
+    g2 = interleave0(g)
+    coarse = iudwt(z[:, :, :-3], J - 1, h2, g2)
+    tmpg = convolve(coarse, g[::-1]) + convolve(z[:, :, -3], h[::-1])
+    tmph = convolve(z[:, :, -2], g[::-1]) + convolve(z[:, :, -1], h[::-1])
+    x = (np.rot90(convolve(np.rot90(tmpg,k=3), g[::-1]),k=1) + np.rot90(convolve(np.rot90(tmph,k=3), h[::-1]),k=1)) / 2
+    return x
+
+def udwt_create_fb(n1, n2, J, h, g, ndim=3):
+    '''
+    Implements UDWT with filter bank
+    Args:
+        n1: kernel dim n
+        n2: kernel dim m
+        J: scales
+        h: filter h
+        g: filter g
+    Kwargs:
+        ndim: number of dimensions
+    Returns:
+        fb: filter bank
+    '''
+    
+    if J == 0:
+        return np.ones((n1, n2, 1, *[1] * (ndim - 2)))
+    h2 = interleave0(h,J)
+    g2 = interleave0(g,J)
+    fbrec = udwt_create_fb(n1, n2, J - 1, h2, g2, ndim=ndim)
+    gf1 = nf.fft(fftpad(g, n1), axis=0)
+    hf1 = nf.fft(fftpad(h, n1), axis=0)
+    gf2 = nf.fft(fftpad(g, n2), axis=0)
+    hf2 = nf.fft(fftpad(h, n2), axis=0)
+    fb = np.zeros((n1, n2, 4), dtype=np.complex128)
+    fb[:, :, 0] = np.outer(gf1, gf2) / 2
+    fb[:, :, 1] = np.outer(gf1, hf2) / 2
+    fb[:, :, 2] = np.outer(hf1, gf2) / 2
+    fb[:, :, 3] = np.outer(hf1, hf2) / 2
+    fb = fb.reshape(n1, n2, 4, *[1] * (ndim - 2))
+    fb = np.concatenate((fb[:, :, 0:1] * fbrec, fb[:, :, -3:]),axis=2)
+    return fb
+
+def fb_apply(x, fb):
+    '''
+    Application of filter bank
+    Args:
+        x: image 
+        fb: filter bank
+    Returns:
+        z: applied filter bank
+    '''
+    
+    x = nf.fft2(x, axes=(0, 1))
+    z = fb * x[:, :, np.newaxis]
+    z = np.real(nf.ifft2(z, axes=(0, 1)))
+    return z
+
+def fb_adjoint(z, fb):
+    '''
+    Application of adjoint filter bank
+    Args:
+        z: input img
+        fb: filter bank
+    Returns:
+        x: adjoint filter bank
+    '''
+    
+    z = nf.fft2(z, axes=(0, 1))
+    x = (np.conj(fb) * z).sum(axis=2)
+    x = np.real(nf.ifft2(x, axes=(0, 1)))
+    return x
+
+class UDWT(LinearOperator):
+    def __init__(self,ishape,J,name="db2",using_fb=True):
+        '''
+        Initializes op for DWT transform encalsulated as a class
+        Args:
+            shape : shape of input provided
+            J: number of scales at which the op is carried out
+        Kwargs:
+            name:name of wavelet used
+        '''
+        self.shape = ishape
+        self.h,self.g = wavelet(name) 
+        self.J = J
+        self.fb = udwt_create_fb(n1, n2, J, h, g, ndim=3)
+
+    def __call__(self,x):
+        return udwt(x,self.J,self.h,self.g)
+
+    def adjoint(self,x):
+        return iudwt(x,self.J,self.h,self.g)
+
+    def gram(self,x):
+        return iudwt(dwt(x,self.J,self.h,self.g),self.J,self.h,self.g)
+
+    def gram_resolvent(self,x,tau):
+        return cg(lambda z: z + tau * self.gram(z), x)
+
+    def invert(self,x):
+        return iudwt(x,self.J,self.h,self.g)
+
+    def power(self):
+        return udwt_power(self.J)
