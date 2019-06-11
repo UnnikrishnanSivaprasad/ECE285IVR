@@ -443,7 +443,7 @@ class UDWT(LinearOperator):
         if self.mode:
             return fb_adjoint(x,self.fb)
         else:
-            return iudwt(x,self.J,self.ah,self.ag)
+            return iudwt(x,self.J,self.h,self.g)
 
     def gram(self,x):
         return self.adjoint(self.__call__(x))
