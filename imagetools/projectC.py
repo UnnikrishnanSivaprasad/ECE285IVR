@@ -1,4 +1,4 @@
-""" Project C
+﻿""" Project C
 
 COMPLETE THIS FILE
 
@@ -241,8 +241,39 @@ class DWT(LinearOperator):
 
     def power(self):
         return dwt_power(self.shape[0],self.shape[1],len(self.shape))
-
     
+def softthresh(z,t):
+    '''
+    Implements soft thresholding of matrix z with threshold t
+    Args:
+        z: array
+        t: threshold
+    Returns:
+        threshold: thresholded version of z
+    '''
+    
+    threshold = np.maximum(z-t,np.zeros_like(z))+np.minimum(z+t,np.zeros_like(z))
+    
+    return threshold
+
+def softthresh_denoise(y, sig, W, alpha=10/255):
+    '''
+    Removes noise by performing soft-thresholding on the wavelet coefficients
+    Args:
+        y: image
+        sig: standard deviation
+        W: wavelet transformation
+    Kwargs:
+        alpha: scaling factor
+    Returns:
+        Denoised image
+    '''
+    
+    coeff = W(y)
+    tau = np.sqrt(2)*np.square(sig)/(alpha*W.power())
+    return softthresh(coeff,tau)
+
+
 def interleave0(x):
     '''
     Upsample the filters h and g in udwt by injecting 2^(j − 1) zeros between each entries.
@@ -300,6 +331,24 @@ def iudwt(z, J, h, g):
     x = (np.rot90(convolve(np.rot90(tmpg,k=3), g[::-1]),k=1) + np.rot90(convolve(np.rot90(tmph,k=3), h[::-1]),k=1)) / 2
     return x
 
+def adjoint(nu):
+    '''
+    Computes adjoint of convolution kernel nu
+    Args:
+        nu: kernel to compute adjoint
+    Returns:
+        mu: adjoint of kernel nu
+    '''
+    mu = np.flip(np.flip(nu,axis=0),axis=1)
+    return mu
+
+def fftpad(signal,length):
+    '''
+    '''
+    kernel = np.zeros((length,1))
+    kernel[:signal.shape[0],:]=signal
+    return kernel
+    
 def udwt_create_fb(n1, n2, J, h, g, ndim=3):
     '''
     Implements UDWT with filter bank
@@ -317,8 +366,8 @@ def udwt_create_fb(n1, n2, J, h, g, ndim=3):
     
     if J == 0:
         return np.ones((n1, n2, 1, *[1] * (ndim - 2)))
-    h2 = interleave0(h,J)
-    g2 = interleave0(g,J)
+    h2 = interleave0(h)
+    g2 = interleave0(g)
     fbrec = udwt_create_fb(n1, n2, J - 1, h2, g2, ndim=ndim)
     gf1 = nf.fft(fftpad(g, n1), axis=0)
     hf1 = nf.fft(fftpad(h, n1), axis=0)
@@ -375,23 +424,36 @@ class UDWT(LinearOperator):
         '''
         self.shape = ishape
         self.h,self.g = wavelet(name) 
+        self.ah,self.ag = adjoint(self.h),adjoint(self.g)
+        self.mode = using_fb
         self.J = J
-        self.fb = udwt_create_fb(n1, n2, J, h, g, ndim=3)
+        if self.mode:
+            self.fb = udwt_create_fb(self.shape[0], self.shape[1], self.J, self.h, self.g, ndim=3)
+        else:
+            self.fb = None
+            
 
     def __call__(self,x):
-        return udwt(x,self.J,self.h,self.g)
+        if self.mode:
+            return fb_apply(x,self.fb)
+        else:
+            return udwt(x,self.J,self.h,self.g)
 
     def adjoint(self,x):
-        return iudwt(x,self.J,self.h,self.g)
+        if self.mode:
+            return fb_adjoint(x,self.fb)
+        else:
+            return iudwt(x,self.J,self.ah,self.ag)
 
     def gram(self,x):
-        return iudwt(dwt(x,self.J,self.h,self.g),self.J,self.h,self.g)
+        return self.adjoint(self.__call__(x))
 
     def gram_resolvent(self,x,tau):
         return cg(lambda z: z + tau * self.gram(z), x)
 
     def invert(self,x):
-        return iudwt(x,self.J,self.h,self.g)
+        return self.adjoint(x)
 
     def power(self):
         return udwt_power(self.J)
+    
